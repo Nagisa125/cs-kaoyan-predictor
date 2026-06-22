@@ -1,113 +1,130 @@
-# CS Kaoyan Predictor (cs-kaoyan-predictor)
+# cs-kaoyan-predictor
 
-A multi-factor prediction system for forecasting Chinese CS postgraduate
-entrance exam (408 track) admission score lines.
+基于**七维因子框架**的 408 计算机考研复试线预测系统。
 
-## Overview
+## 概述
 
-This project implements a **7-factor scoring framework** combined with
-**5 heuristic rules** to predict year-over-year changes in the minimum
-admission score line (复试线) for 408-based CS graduate programs at
-top Chinese universities.
+区别于仅用历史分数序列做线性回归或神经网络的方案，本系统将考研复试线视为"市场定价"的结果，把影响分数线的因素拆解为 7 个可量化维度，加权求和后叠加 5 条启发式规则修正，输出下一年复试线的涨跌方向和幅度区间。
 
-Unlike simple linear regression or neural network approaches that only
-look at historical score sequences, our framework incorporates market-style
-factors such as substitution effects, community sentiment, quota elasticity,
-and cross-school spillover.
+已在 12 个院校专业上完成回测验证（2022-2025 → 2026）。
 
-## Framework
+## 框架
 
-### Seven Core Factors
+### 七大核心因子
 
-| # | Factor | Weight | Description |
-|---|--------|--------|-------------|
-| 1 | Mean Reversion | 0.23 | How far the current score line deviates from the 4-year mean |
-| 2 | Quota Elasticity | 0.20 | Change in available exam admission slots |
-| 3 | Substitute Pricing | 0.17 | Score gap vs same-tier peer schools |
-| 4 | Community Heat | 0.16 | Discussion frequency on social platforms |
-| 5 | Admission Ratio | 0.10 | Previous year's interview-to-offer ratio |
-| 6 | Established Facts | 0.10 | Structural changes (exam reform, department merge) |
-| 7 | Survivorship Bias | 0.08 | Distortion from success-story amplification |
+| # | 因子 | 权重 | 含义 |
+|---|------|:---:|------|
+| 1 | 均值回归 | 0.23 | 当前分数线偏离近4年均值的程度。过低则向上回归，过高则向下回归 |
+| 2 | 名额弹性 | 0.20 | 统考名额的变化幅度。名额骤减则分数暴涨，大幅扩招则分数承压 |
+| 3 | 替代品分差 | 0.17 | 与同档次对标院校的分差。分差过大则形成"洼地"，吸引跨校套利考生 |
+| 4 | 社区热度 | 0.16 | 社交平台（知乎/B站/小红书/抖音）的讨论频次与情绪倾向 |
+| 5 | 复录比 | 0.10 | 上一年复试人数与录取人数的比值。极低则吸引次年报考，极高则劝退 |
+| 6 | 公认事实 | 0.10 | 结构性冲击：考试科目变更、院系合并/拆分、统招取消等 |
+| 7 | 幸存者偏差 | 0.08 | 低分上岸经验帖大量传播造成的"容易考"错觉 |
 
-### Five Heuristic Rules (R1-R5)
+### 五条启发式规则 (R1-R5)
 
-| Rule | Trigger | Adjustment |
-|------|---------|------------|
-| R1 | Substitute gap > 30 AND admission ratio < 1.15 | +2.5 boost |
-| R2 | Same-tier school surges > 20 pts | +1.5 spillover to bargain schools |
-| R3 | Score line < 310 at 985-level school | +1.0 absolute-floor bounce |
-| R4 | First-year exam reform transition | +1.0 partial recovery |
-| R5 | Score deviation > 20 pts | ×1.3 mean-reversion amplifier |
+| 规则 | 触发条件 | 修正 |
+|:---:|:---|:---:|
+| R1 | 替代品分差 > 30 且复录比 < 1.15 | +2.5 复合套利加成 |
+| R2 | 同梯队院校前一年暴涨 > 20 分 | +1.5 跨校溢出到"相对洼地" |
+| R3 | 985 院校复试线 < 310 分 | +1.0 绝对值触底反弹 |
+| R4 | 考试科目变更首年过后 | +1.0 过渡期部分修复 |
+| R5 | 偏离均值 > 20 分 | ×1.3 非线性放大；>30 分 ×1.5 |
 
-### Global Heat Coefficient
+### 全局热度系数
 
-| Scope | Condition | Value |
-|------|-----------|-------|
-| Standard | < 50% tracked schools below 4-year mean | +0.3 |
-| Elevated | ≥ 50% tracked schools below 4-year mean | +0.8 |
+| 档位 | 条件 | 系数 |
+|:---:|:---|:---:|
+| 标准 | 跟踪院校中 < 50% 低于自身四年均值 | +0.3 |
+| 升温 | 跟踪院校中 ≥ 50% 低于自身四年均值 | +0.8 |
 
-### Exam Code Reference
+### 考试科目代码
 
-| Code | Subjects |
-|------|----------|
-| `11408` | Politics + English-I + Math-I + 408 |
-| `22408` | Politics + English-II + Math-II + 408 |
+| 代码 | 科目组成 |
+|:---:|:---|
+| `11408` | 政治(101) + 英语一(201) + 数学一(301) + 408 计算机学科专业基础 |
+| `22408` | 政治(101) + 英语二(204) + 数学二(302) + 408 计算机学科专业基础 |
 
-## Usage
+## 使用方式
+
+```bash
+git clone https://github.com/Nagisa125/cs-kaoyan-predictor.git
+cd cs-kaoyan-predictor
+pip install -r requirements.txt
+```
 
 ### CLI
 
 ```bash
-# Predict all tracked schools for 2027
-kaoyan-predict 2027
+# 预测 2027 年所有跟踪院校
+python3 src/cli.py predict 2027
 
-# Predict specific school
-kaoyan-predict 2027 --schools hust,nju,zju
+# 只看特定学校（支持中文关键词模糊匹配）
+python3 src/cli.py predict 2027 --schools 华科,南大
 
-# Backtest framework against historical data
-kaoyan-predict backtest --year 2026
+# 回测框架（用历史数据验证准确性）
+python3 src/cli.py backtest --year 2026
 
-# Export predictions to Excel
-kaoyan-predict 2027 --export predictions.xlsx
+# 导出预测结果到 Excel
+python3 src/cli.py export --year 2027 -o predictions.xlsx
 ```
 
 ### Python API
 
 ```python
-from src.data.loader import load_school_data
-from src.framework import PredictionEngine
+from framework import PredictionEngine
+from data.schools import build_school_data
 
 engine = PredictionEngine()
-schools = load_school_data()
-predictions = engine.predict_all(schools, target_year=2027)
+schools = build_school_data()
+results = engine.predict_all(schools, target_year=2027)
 
-for p in predictions:
-    print(f"{p.school} {p.major}: {p.predicted_score} (±{p.confidence_interval})")
+for r in results:
+    print(f"{r.school} {r.major}: {r.predicted_score} (置信度: {r.confidence})")
 ```
 
-## Backtest Performance
+### 添加新学校
 
-Validated against 13 school-program pairs (2022-2025 → 2026):
+编辑 `src/data/schools.py`，按模板追加数据：
 
-| Metric | Value |
-|--------|-------|
-| Direction accuracy | 100% (13/13) |
-| Median absolute error | 3 pts |
-| Mean absolute error | 5.5 pts |
-| Within 10 pts | 92% (12/13) |
+```python
+data.append(SchoolProgram(
+    school="XX大学", major="计算机技术(085404)", major_type="专硕",
+    college="计算机学院", exam_code="11408",
+    scores={2023: 340, 2024: 335, 2025: 330, 2026: 345},  # 历年复试线
+    admitted={2024: 50, 2025: 60},                          # 录取人数
+    avg_scores={2025: 370},                                  # 录取均分（可选）
+    ratios={2025: 1.30},                                     # 复录比（可选）
+    peers=["对标院校A", "对标院校B"],                         # 同档对标院校
+    peer_scores={
+        "对标院校A": {2025: 350, 2026: 360},
+    },
+))
+```
 
-## Tracked Schools (2022-2026 data)
+## 回测性能
 
-| School | Programs |
-|--------|----------|
-| 同济大学 | CS, SE, CS Tech |
-| 武汉大学 | CS, SE, CS Tech, Cybersec |
-| 华中科技大学 | CS, CS Tech, SE, Cybersec, AI |
-| 南京大学 | CS, CS Tech, SE |
-| 中山大学 | CS, CS Tech, SE, AI, Cybersec |
-| 上海交通大学 | CS, CS Tech |
-| 浙江大学 | CS, CS Tech, SE |
-| 电子科技大学 | CS, CS Tech, SE |
+用 2022-2025 年数据盲测 2026 年复试线，12 个院校专业案例：
+
+| 指标 | 数值 |
+|:---|:---:|
+| 方向准确率 | **92%** (11/12) |
+| 中位数误差 | **12 分** |
+| 平均绝对误差 | 13.8 分 |
+
+## 跟踪院校
+
+| 院校 | 覆盖专业 |
+|:---|:---|
+| 同济大学 | 计算机技术(专硕) |
+| 武汉大学 | 计算机技术(专硕)、网安(专硕) |
+| 华中科技大学 | 计算机技术(专硕)、网安(专硕) |
+| 南京大学 | 计算机(专硕)、软件(专硕) |
+| 中山大学 | 计算机技术(专硕) |
+| 上海交通大学 | 电子信息-计算机(专硕) |
+| 浙江大学 | 电子信息-计算机(专硕)、电子信息-软件(专硕) |
+| 电子科技大学 | 计算机技术(专硕) |
 
 ## License
 
